@@ -61,7 +61,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const { id, action } = body as { id?: string; action?: string };
 
     if (!id || !['accept', 'reject'].includes(action ?? '')) {
-      logger.warn({ event: 'validation_failed', body })
+      logger.warn({ event: 'validation_failed', hasId: Boolean(id), action })
       return NextResponse.json<ApiError>(
         { code: 'VALIDATION_ERROR', message: 'id and action (accept|reject) are required' },
         { status: 400 }

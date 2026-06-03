@@ -1,6 +1,7 @@
 import pino from 'pino'
 import { AsyncLocalStorage } from 'async_hooks'
-import type { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 
 type LoggerContext = { correlationId: string }
 
@@ -8,7 +9,7 @@ const asyncLocalStorage = new AsyncLocalStorage<LoggerContext>()
 
 const baseLogger = pino({
   level: process.env.LOG_LEVEL ?? 'info',
-  base: undefined,
+  base: null,
   timestamp: pino.stdTimeFunctions.isoTime,
 })
 
@@ -49,9 +50,23 @@ export async function withRequestLogger(
   return runWithCorrelationId(correlationId, async () => {
     const logger = getLogger(moduleName)
     logger.info({ event: 'request.start', method: request.method, url: request.url })
-    const response = await fn(logger)
-    response.headers.set('x-correlation-id', correlationId)
-    return response
+    try {
+      const response = await fn(logger)
+      response.headers.set('x-correlation-id', correlationId)
+      logger.info({ event: 'request.end', status: response.status })
+      return response
+    } catch (err) {
+      logger.error({
+        event: 'request.error',
+        error: err instanceof Error ? err.message : 'Unknown error',
+      })
+      const response = NextResponse.json(
+        { code: 'INTERNAL_ERROR', message: 'Internal server error' },
+        { status: 500 }
+      )
+      response.headers.set('x-correlation-id', correlationId)
+      return response
+    }
   })
 }
 
@@ -63,8 +78,22 @@ export async function withLoggerContext(
   return runWithCorrelationId(correlationId, async () => {
     const logger = getLogger(moduleName)
     logger.info({ event: 'request.start' })
-    const response = await fn(logger)
-    response.headers.set('x-correlation-id', correlationId)
-    return response
+    try {
+      const response = await fn(logger)
+      response.headers.set('x-correlation-id', correlationId)
+      logger.info({ event: 'request.end', status: response.status })
+      return response
+    } catch (err) {
+      logger.error({
+        event: 'request.error',
+        error: err instanceof Error ? err.message : 'Unknown error',
+      })
+      const response = NextResponse.json(
+        { code: 'INTERNAL_ERROR', message: 'Internal server error' },
+        { status: 500 }
+      )
+      response.headers.set('x-correlation-id', correlationId)
+      return response
+    }
   })
 }
